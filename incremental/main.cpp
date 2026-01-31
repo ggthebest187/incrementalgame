@@ -1,41 +1,28 @@
 #include <windows.h>
 #include <gdiplus.h>
-#include <string>
-#include <sstream>
-#include <iomanip>
+#include "game.h"
+#include "ui.h"
 
 #pragma comment(lib, "gdiplus.lib")
 
 using namespace Gdiplus;
 
-// Game state
-struct GameState {
-    double food = 0.0;
-    double wood = 0.0;
-    double stone = 0.0;
-    double gold = 0.0;
-
-    double foodPerSecond = 1.0;
-    double woodPerSecond = 0.5;
-    double stonePerSecond = 0.3;
-    double goldPerSecond = 0.1;
-
-    float gameTime = 0.0f;
-    LARGE_INTEGER lastTime;
-    LARGE_INTEGER frequency;
-
-    int fps = 0;
-    int frameCount = 0;
-    LARGE_INTEGER fpsTime;
-};
-
+// Global state
 GameState g_game;
+UIManager g_ui;
+
+// Timing
+LARGE_INTEGER g_frequency;
+LARGE_INTEGER g_lastTime;
+LARGE_INTEGER g_fpsTime;
+int g_fps = 0;
+int g_frameCount = 0;
 
 // Initialize timing
 void InitTiming() {
-    QueryPerformanceFrequency(&g_game.frequency);
-    QueryPerformanceCounter(&g_game.lastTime);
-    g_game.fpsTime = g_game.lastTime;
+    QueryPerformanceFrequency(&g_frequency);
+    QueryPerformanceCounter(&g_lastTime);
+    g_fpsTime = g_lastTime;
 }
 
 // Calculate delta time
@@ -43,106 +30,19 @@ float GetDeltaTime() {
     LARGE_INTEGER currentTime;
     QueryPerformanceCounter(&currentTime);
 
-    float deltaTime = (float)(currentTime.QuadPart - g_game.lastTime.QuadPart) / (float)g_game.frequency.QuadPart;
-    g_game.lastTime = currentTime;
+    float deltaTime = (float)(currentTime.QuadPart - g_lastTime.QuadPart) / (float)g_frequency.QuadPart;
+    g_lastTime = currentTime;
 
     // FPS calculation
-    g_game.frameCount++;
-    float fpsElapsed = (float)(currentTime.QuadPart - g_game.fpsTime.QuadPart) / (float)g_game.frequency.QuadPart;
+    g_frameCount++;
+    float fpsElapsed = (float)(currentTime.QuadPart - g_fpsTime.QuadPart) / (float)g_frequency.QuadPart;
     if (fpsElapsed >= 1.0f) {
-        g_game.fps = g_game.frameCount;
-        g_game.frameCount = 0;
-        g_game.fpsTime = currentTime;
+        g_fps = g_frameCount;
+        g_frameCount = 0;
+        g_fpsTime = currentTime;
     }
 
     return deltaTime;
-}
-
-// Update game logic
-void UpdateGame(float deltaTime) {
-    g_game.gameTime += deltaTime;
-    g_game.food += g_game.foodPerSecond * deltaTime;
-    g_game.wood += g_game.woodPerSecond * deltaTime;
-    g_game.stone += g_game.stonePerSecond * deltaTime;
-    g_game.gold += g_game.goldPerSecond * deltaTime;
-}
-
-// Render the game
-void RenderGame(HDC hdc, int width, int height) {
-    Graphics graphics(hdc);
-    graphics.SetSmoothingMode(SmoothingModeAntiAlias);
-    graphics.SetTextRenderingHint(TextRenderingHintAntiAlias);
-
-    // Clear background
-    SolidBrush bgBrush(Color(255, 20, 20, 30));
-    graphics.FillRectangle(&bgBrush, 0, 0, width, height);
-
-    // Set up fonts
-    FontFamily fontFamily(L"Arial");
-    Font titleFont(&fontFamily, 24, FontStyleBold, UnitPixel);
-    Font resourceFont(&fontFamily, 18, FontStyleRegular, UnitPixel);
-    Font smallFont(&fontFamily, 14, FontStyleRegular, UnitPixel);
-
-    // Title
-    SolidBrush goldBrush(Color(255, 255, 215, 0));
-    PointF titlePos(300.0f, 20.0f);
-    graphics.DrawString(L"=== PROCEDURAL CIVILIZATION ===", -1, &titleFont, titlePos, &goldBrush);
-
-    // FPS counter
-    SolidBrush whiteBrush(Color(255, 255, 255, 255));
-    std::wstringstream fpsStream;
-    fpsStream << L"FPS: " << g_game.fps;
-    PointF fpsPos(10.0f, 10.0f);
-    graphics.DrawString(fpsStream.str().c_str(), -1, &smallFont, fpsPos, &whiteBrush);
-
-    // Resources
-    SolidBrush foodBrush(Color(255, 100, 255, 100));
-    SolidBrush woodBrush(Color(255, 139, 69, 19));
-    SolidBrush stoneBrush(Color(255, 128, 128, 128));
-    SolidBrush goldResourceBrush(Color(255, 255, 215, 0));
-
-    float yPos = 100.0f;
-    float xPos = 50.0f;
-
-    // Food
-    std::wstringstream foodStream;
-    foodStream << L"Food: " << std::fixed << std::setprecision(1) << g_game.food;
-    PointF foodPos(xPos, yPos);
-    graphics.DrawString(foodStream.str().c_str(), -1, &resourceFont, foodPos, &foodBrush);
-    yPos += 40.0f;
-
-    // Wood
-    std::wstringstream woodStream;
-    woodStream << L"Wood: " << std::fixed << std::setprecision(1) << g_game.wood;
-    PointF woodPos(xPos, yPos);
-    graphics.DrawString(woodStream.str().c_str(), -1, &resourceFont, woodPos, &woodBrush);
-    yPos += 40.0f;
-
-    // Stone
-    std::wstringstream stoneStream;
-    stoneStream << L"Stone: " << std::fixed << std::setprecision(1) << g_game.stone;
-    PointF stonePos(xPos, yPos);
-    graphics.DrawString(stoneStream.str().c_str(), -1, &resourceFont, stonePos, &stoneBrush);
-    yPos += 40.0f;
-
-    // Gold
-    std::wstringstream goldStream;
-    goldStream << L"Gold: " << std::fixed << std::setprecision(1) << g_game.gold;
-    PointF goldPos(xPos, yPos);
-    graphics.DrawString(goldStream.str().c_str(), -1, &resourceFont, goldPos, &goldResourceBrush);
-    yPos += 60.0f;
-
-    // Production rates
-    SolidBrush grayBrush(Color(255, 200, 200, 200));
-    std::wstringstream prodStream;
-    prodStream << L"Production Rates:\n"
-        << L"  Food: +" << std::fixed << std::setprecision(1) << g_game.foodPerSecond << L"/s\n"
-        << L"  Wood: +" << g_game.woodPerSecond << L"/s\n"
-        << L"  Stone: +" << g_game.stonePerSecond << L"/s\n"
-        << L"  Gold: +" << g_game.goldPerSecond << L"/s";
-
-    RectF prodRect(xPos, yPos, 400.0f, 150.0f);
-    graphics.DrawString(prodStream.str().c_str(), -1, &smallFont, prodRect, NULL, &grayBrush);
 }
 
 // Window procedure
@@ -158,6 +58,25 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         return 0;
 
+    case WM_MOUSEMOVE: {
+        int x = LOWORD(lParam);
+        int y = HIWORD(lParam);
+        g_ui.HandleMouseMove(x, y);
+        return 0;
+    }
+
+    case WM_LBUTTONDOWN: {
+        int x = LOWORD(lParam);
+        int y = HIWORD(lParam);
+        g_ui.HandleMouseDown(x, y, g_game);
+        return 0;
+    }
+
+    case WM_LBUTTONUP: {
+        g_ui.HandleMouseUp();
+        return 0;
+    }
+
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
@@ -172,7 +91,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         HBITMAP hbmMem = CreateCompatibleBitmap(hdc, width, height);
         HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, hbmMem);
 
-        RenderGame(hdcMem, width, height);
+        g_ui.Render(hdcMem, width, height, g_game, g_fps);
 
         BitBlt(hdc, 0, 0, width, height, hdcMem, 0, 0, SRCCOPY);
 
@@ -212,7 +131,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         CLASS_NAME,
         L"Procedural Civilization - Idle Game",
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 1280, 720,
+        CW_USEDEFAULT, CW_USEDEFAULT, 1100, 700,
         NULL,
         NULL,
         hInstance,
@@ -225,8 +144,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     ShowWindow(hwnd, nCmdShow);
 
-    // Initialize timing
+    // Initialize game and UI
     InitTiming();
+    g_ui.Initialize();
 
     // Main game loop
     MSG msg = {};
@@ -245,7 +165,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         if (running) {
             // Update game
             float deltaTime = GetDeltaTime();
-            UpdateGame(deltaTime);
+            g_game.Update(deltaTime);
+            g_ui.Update(deltaTime, g_game);
 
             // Render
             InvalidateRect(hwnd, NULL, FALSE);

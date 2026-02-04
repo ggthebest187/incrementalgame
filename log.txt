@@ -1,0 +1,4 @@
+Generating chunk: 0, 0
+Generating chunk: 1, 0
+Generating chunk: 0, 1
+Generating chunk: 1, 1

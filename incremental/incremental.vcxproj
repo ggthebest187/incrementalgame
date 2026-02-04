@@ -135,7 +135,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="game.h" />
+    <ClInclude Include="map_view.h" />
+    <ClInclude Include="terrain.h" />
     <ClInclude Include="ui.h" />
+    <ClInclude Include="upgrade_tree.h" />
+    <ClInclude Include="upgrade_tree_menu.h" />
+    <ClInclude Include="world_map.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

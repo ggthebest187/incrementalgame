@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <windows.h>
 #include <gdiplus.h>
 #include <string>
@@ -6,6 +6,8 @@
 #include <sstream>
 #include <iomanip>
 #include "game.h"
+#include "upgrade_tree_menu.h"
+#include "map_view.h"
 
 using namespace Gdiplus;
 
@@ -37,22 +39,18 @@ public:
     }
 
     void Render(Graphics& graphics, Font& font) {
-        // Choose color based on state
         Color currentColor = normalColor;
         if (!isEnabled) currentColor = disabledColor;
         else if (isPressed) currentColor = pressedColor;
         else if (isHovered) currentColor = hoverColor;
 
-        // Draw button background
         SolidBrush bgBrush(currentColor);
         graphics.FillRectangle(&bgBrush, x, y, width, height);
 
-        // Draw border
         Color borderColor = isEnabled ? Color(255, 150, 150, 150) : Color(255, 80, 80, 80);
         Pen borderPen(borderColor, 2.0f);
         graphics.DrawRectangle(&borderPen, x, y, width, height);
 
-        // Draw text centered
         Color textColor = isEnabled ? Color(255, 255, 255, 255) : Color(255, 120, 120, 120);
         SolidBrush textBrush(textColor);
         RectF rect(x, y, width, height);
@@ -68,6 +66,12 @@ class UIManager {
 public:
     std::vector<Button> gatherButtons;
     std::vector<Button> buildingButtons;
+    Button upgradeTreeButton;
+    Button mapButton;
+
+    UpgradeTreeMenu upgradeTreeMenu;
+    MapView mapView;
+    bool showMap = false;
 
     std::wstring clickFeedback;
     float feedbackTimer = 0.0f;
@@ -75,10 +79,18 @@ public:
     int mouseX = 0;
     int mouseY = 0;
     bool mouseDown = false;
+    bool rightMouseDown = false;
 
-    void Initialize() {
+    UIManager() : upgradeTreeButton(450.0f, 20.0f, 200.0f, 40.0f, L"UPGRADE TREE (U)",
+        Color(255, 100, 50, 150)),
+        mapButton(660.0f, 20.0f, 150.0f, 40.0f, L"MAP (M)",
+            Color(255, 50, 150, 100)) {
+    }
+
+    void Initialize(const GameState& game) {
         InitializeGatherButtons();
         InitializeBuildingButtons();
+        upgradeTreeMenu.Initialize();
     }
 
     void InitializeGatherButtons() {
@@ -89,30 +101,29 @@ public:
         float buttonSpacing = 55.0f;
 
         gatherButtons.push_back(Button(buttonX, buttonY, buttonWidth, buttonHeight,
-            L"Gather Food (+5)", Color(255, 50, 150, 50)));
+            L"Gather Food", Color(255, 50, 150, 50)));
         buttonY += buttonSpacing;
 
         gatherButtons.push_back(Button(buttonX, buttonY, buttonWidth, buttonHeight,
-            L"Chop Wood (+3)", Color(255, 100, 50, 0)));
+            L"Chop Wood", Color(255, 100, 50, 0)));
         buttonY += buttonSpacing;
 
         gatherButtons.push_back(Button(buttonX, buttonY, buttonWidth, buttonHeight,
-            L"Mine Stone (+2)", Color(255, 80, 80, 80)));
+            L"Mine Stone", Color(255, 80, 80, 80)));
         buttonY += buttonSpacing;
 
         gatherButtons.push_back(Button(buttonX, buttonY, buttonWidth, buttonHeight,
-            L"Pan Gold (+1)", Color(255, 180, 150, 0)));
+            L"Pan Gold", Color(255, 180, 150, 0)));
     }
 
     void InitializeBuildingButtons() {
-        float buttonX = 400.0f;
-        float buttonY = 350.0f;
-        float buttonWidth = 160.0f;
-        float buttonHeight = 60.0f;
-        float buttonSpacingX = 170.0f;
-        float buttonSpacingY = 70.0f;
+        float buttonX = 270.0f;
+        float buttonY = 400.0f;
+        float buttonWidth = 140.0f;
+        float buttonHeight = 55.0f;
+        float buttonSpacingX = 150.0f;
+        float buttonSpacingY = 65.0f;
 
-        // Create buttons for each building type (will be filled with actual building names later)
         for (int i = 0; i < 5; i++) {
             float x = buttonX + (i % 3) * buttonSpacingX;
             float y = buttonY + (i / 3) * buttonSpacingY;
@@ -123,29 +134,70 @@ public:
     }
 
     void Update(float deltaTime, GameState& game) {
-        // Update button hover states
-        for (auto& button : gatherButtons) {
-            button.isHovered = button.Contains(mouseX, mouseY);
-            if (!mouseDown) button.isPressed = false;
+        // Update map hover
+        if (showMap) {
+            mapView.UpdateHover(mouseX, mouseY);
+        }
+
+        // Don't update main UI if tree is visible
+        if (upgradeTreeMenu.isVisible) {
+            upgradeTreeMenu.hoveredNode = upgradeTreeMenu.GetNodeAt(mouseX, mouseY);
+            return;
+        }
+
+        // Update map button
+        mapButton.isHovered = mapButton.Contains(mouseX, mouseY);
+        if (!mouseDown) mapButton.isPressed = false;
+
+        // Update gather button text with click power
+        for (size_t i = 0; i < gatherButtons.size(); i++) {
+            gatherButtons[i].isHovered = gatherButtons[i].Contains(mouseX, mouseY);
+            if (!mouseDown) gatherButtons[i].isPressed = false;
+
+            std::wstringstream ss;
+            switch (i) {
+            case 0:
+                ss << L"Gather Food (+" << std::fixed << std::setprecision(2) << game.resources[ResourceType::Food].clickPower << L")";
+                break;
+            case 1:
+                ss << L"Chop Wood (+" << std::fixed << std::setprecision(2) << game.resources[ResourceType::Wood].clickPower << L")";
+                break;
+            case 2:
+                ss << L"Mine Stone (+" << std::fixed << std::setprecision(2) << game.resources[ResourceType::Stone].clickPower << L")";
+                break;
+            case 3:
+                ss << L"Pan Gold (+" << std::fixed << std::setprecision(2) << game.resources[ResourceType::Gold].clickPower << L")";
+                break;
+            }
+            gatherButtons[i].text = ss.str();
         }
 
         for (size_t i = 0; i < buildingButtons.size(); i++) {
             buildingButtons[i].isHovered = buildingButtons[i].Contains(mouseX, mouseY);
             if (!mouseDown) buildingButtons[i].isPressed = false;
 
-            // Update enabled state based on affordability
-            buildingButtons[i].isEnabled = game.CanAfford(i);
+            buildingButtons[i].isEnabled = game.CanAfford(static_cast<int>(i));
 
-            // Update button text with building info
             if (i < game.buildings.size()) {
                 const auto& building = game.buildings[i];
                 std::wstringstream ss;
-                ss << building.type->name << L" (" << building.count << L")";
+
+                if (game.IsBuildingUnlocked(static_cast<int>(i))) {
+                    ss << building.type->name << L" (" << building.count << L")";
+                }
+                else {
+                    ss << L"[LOCKED]";
+                    buildingButtons[i].isEnabled = false;
+                }
+
                 buildingButtons[i].text = ss.str();
             }
         }
 
-        // Update click feedback
+        // Update tree button
+        upgradeTreeButton.isHovered = upgradeTreeButton.Contains(mouseX, mouseY);
+        if (!mouseDown) upgradeTreeButton.isPressed = false;
+
         if (feedbackTimer > 0.0f) {
             feedbackTimer -= deltaTime;
             if (feedbackTimer <= 0.0f) {
@@ -155,37 +207,35 @@ public:
     }
 
     void HandleGatherButtonClick(int buttonIndex, GameState& game) {
+        ResourceType type;
         switch (buttonIndex) {
-        case 0:
-            game.GatherResource(ResourceType::Food, 5.0);
-            clickFeedback = L"+5 Food!";
-            feedbackTimer = 1.0f;
-            break;
-        case 1:
-            game.GatherResource(ResourceType::Wood, 3.0);
-            clickFeedback = L"+3 Wood!";
-            feedbackTimer = 1.0f;
-            break;
-        case 2:
-            game.GatherResource(ResourceType::Stone, 2.0);
-            clickFeedback = L"+2 Stone!";
-            feedbackTimer = 1.0f;
-            break;
-        case 3:
-            game.GatherResource(ResourceType::Gold, 1.0);
-            clickFeedback = L"+1 Gold!";
-            feedbackTimer = 1.0f;
-            break;
+        case 0: type = ResourceType::Food; break;
+        case 1: type = ResourceType::Wood; break;
+        case 2: type = ResourceType::Stone; break;
+        case 3: type = ResourceType::Gold; break;
+        default: return;
         }
+
+        game.GatherResource(type);
+
+        std::wstringstream ss;
+        ss << L"+" << std::fixed << std::setprecision(2) << game.resources[type].clickPower << L" " << game.resources[type].name << L"!";
+        clickFeedback = ss.str();
+        feedbackTimer = 1.0f;
     }
 
     void HandleBuildingButtonClick(int buttonIndex, GameState& game) {
         if (game.PurchaseBuilding(buttonIndex)) {
-            clickFeedback = L"Built " + game.buildings[buttonIndex].type->name + L"!";
-            feedbackTimer = 1.5f;
+            // Entered placement mode - open map automatically
+            showMap = true;
+            mapView.showPlacementPreview = true;
+            mapView.placementBuildingIndex = buttonIndex;
+
+            clickFeedback = L"Click on map to place " + game.buildings[buttonIndex].type->name + L"!";
+            feedbackTimer = 3.0f;
         }
         else {
-            clickFeedback = L"Not enough resources!";
+            clickFeedback = L"Cannot afford!";
             feedbackTimer = 1.0f;
         }
     }
@@ -193,11 +243,79 @@ public:
     void HandleMouseDown(int x, int y, GameState& game) {
         mouseDown = true;
 
+        // Check if tree is visible
+        if (upgradeTreeMenu.isVisible) {
+            int nodeIdx = upgradeTreeMenu.GetNodeAt(x, y);
+            if (nodeIdx >= 0) {
+                // Clicked on a node
+                const auto& node = upgradeTreeMenu.tree.nodes[nodeIdx];
+                if (game.PurchaseUpgrade(node.upgradeIndex)) {
+                    clickFeedback = L"Purchased: " + game.upgrades[node.upgradeIndex].name + L"!";
+                    feedbackTimer = 2.0f;
+                }
+            }
+            return;
+        }
+
+        // Check if in placement mode and clicking on map
+        if (showMap && game.placementMode && mapView.Contains(x, y)) {
+            // Place building at hovered tile
+            if (mapView.hoveredTileX != -1 && mapView.hoveredTileY != -1) {
+                TerrainTile tile;
+                try {
+                    tile = mapView.worldMap.GetTile(mapView.hoveredTileX, mapView.hoveredTileY);
+                    double bonus = game.GetTileBonusForBuilding(game.selectedBuildingType, tile);
+
+                    if (game.PlaceBuilding(game.selectedBuildingType,
+                        mapView.hoveredTileX, mapView.hoveredTileY, bonus)) {
+                        std::wstringstream ss;
+                        ss << L"Built " << game.buildings[game.selectedBuildingType].type->name
+                            << L" (x" << std::fixed << std::setprecision(2) << bonus << L" bonus)!";
+                        clickFeedback = ss.str();
+                        feedbackTimer = 2.5f;
+
+                        // Exit placement mode
+                        mapView.showPlacementPreview = false;
+                        mapView.placementBuildingIndex = -1;
+                    }
+                }
+                catch (...) {
+                    clickFeedback = L"Cannot place here!";
+                    feedbackTimer = 1.0f;
+                }
+            }
+            return;
+        }
+
+        // Check map button
+        if (mapButton.Contains(x, y)) {
+            mapButton.isPressed = true;
+
+            // If in placement mode and closing map, cancel placement
+            if (showMap && game.placementMode) {
+                game.CancelPlacement();
+                mapView.showPlacementPreview = false;
+                mapView.placementBuildingIndex = -1;
+                clickFeedback = L"Placement cancelled";
+                feedbackTimer = 1.5f;
+            }
+
+            showMap = !showMap;
+            return;
+        }
+
+        // Check tree button
+        if (upgradeTreeButton.Contains(x, y)) {
+            upgradeTreeButton.isPressed = true;
+            upgradeTreeMenu.Toggle();
+            return;
+        }
+
         // Check gather buttons
         for (size_t i = 0; i < gatherButtons.size(); i++) {
             if (gatherButtons[i].Contains(x, y)) {
                 gatherButtons[i].isPressed = true;
-                HandleGatherButtonClick(i, game);
+                HandleGatherButtonClick(static_cast<int>(i), game);
                 return;
             }
         }
@@ -206,9 +324,19 @@ public:
         for (size_t i = 0; i < buildingButtons.size(); i++) {
             if (buildingButtons[i].Contains(x, y) && buildingButtons[i].isEnabled) {
                 buildingButtons[i].isPressed = true;
-                HandleBuildingButtonClick(i, game);
+                HandleBuildingButtonClick(static_cast<int>(i), game);
                 return;
             }
+        }
+    }
+
+    void HandleRightMouseDown(int x, int y) {
+        rightMouseDown = true;
+        if (upgradeTreeMenu.isVisible) {
+            upgradeTreeMenu.StartPan(x, y);
+        }
+        else if (showMap) {
+            mapView.StartPan(x, y);
         }
     }
 
@@ -216,11 +344,55 @@ public:
         mouseDown = false;
         for (auto& button : gatherButtons) button.isPressed = false;
         for (auto& button : buildingButtons) button.isPressed = false;
+        upgradeTreeButton.isPressed = false;
+        mapButton.isPressed = false;
+    }
+
+    void HandleRightMouseUp() {
+        rightMouseDown = false;
+        upgradeTreeMenu.StopPan();
+        mapView.StopPan();
     }
 
     void HandleMouseMove(int x, int y) {
         mouseX = x;
         mouseY = y;
+        upgradeTreeMenu.Pan(x, y);
+        mapView.Pan(x, y);
+    }
+
+    void HandleMouseWheel(int delta) {
+        if (showMap && mapView.Contains(mouseX, mouseY)) {
+            mapView.Zoom(delta);
+        }
+    }
+
+    void HandleKeyPress(WPARAM key, GameState& game) {
+        if (key == 'U' || key == 'u') {
+            upgradeTreeMenu.Toggle();
+        }
+        else if (key == 'M' || key == 'm') {
+            // If in placement mode, cancel it
+            if (game.placementMode) {
+                game.CancelPlacement();
+                mapView.showPlacementPreview = false;
+                mapView.placementBuildingIndex = -1;
+                clickFeedback = L"Placement cancelled";
+                feedbackTimer = 1.5f;
+            }
+            showMap = !showMap;
+        }
+        else if (key == VK_ESCAPE) {
+            // Cancel placement mode
+            if (game.placementMode) {
+                game.CancelPlacement();
+                mapView.showPlacementPreview = false;
+                mapView.placementBuildingIndex = -1;
+                showMap = false;
+                clickFeedback = L"Placement cancelled";
+                feedbackTimer = 1.5f;
+            }
+        }
     }
 
     void Render(HDC hdc, int width, int height, const GameState& game, int fps) {
@@ -228,31 +400,41 @@ public:
         graphics.SetSmoothingMode(SmoothingModeAntiAlias);
         graphics.SetTextRenderingHint(TextRenderingHintAntiAlias);
 
-        // Clear background
         SolidBrush bgBrush(Color(255, 20, 20, 30));
         graphics.FillRectangle(&bgBrush, 0, 0, width, height);
 
-        // Set up fonts
         FontFamily fontFamily(L"Arial");
-        Font titleFont(&fontFamily, 24, FontStyleBold, UnitPixel);
-        Font resourceFont(&fontFamily, 18, FontStyleRegular, UnitPixel);
-        Font smallFont(&fontFamily, 14, FontStyleRegular, UnitPixel);
-        Font buttonFont(&fontFamily, 14, FontStyleBold, UnitPixel);
-        Font tinyFont(&fontFamily, 11, FontStyleRegular, UnitPixel);
+        Font titleFont(&fontFamily, 22, FontStyleBold, UnitPixel);
+        Font resourceFont(&fontFamily, 16, FontStyleRegular, UnitPixel);
+        Font smallFont(&fontFamily, 13, FontStyleRegular, UnitPixel);
+        Font buttonFont(&fontFamily, 13, FontStyleBold, UnitPixel);
+        Font tinyFont(&fontFamily, 10, FontStyleRegular, UnitPixel);
 
-        RenderTitle(graphics, titleFont);
-        RenderFPS(graphics, smallFont, fps);
-        RenderResources(graphics, resourceFont, game);
-        RenderProductionRates(graphics, smallFont, game);
-        RenderBuildings(graphics, resourceFont, smallFont, game);
-        RenderButtons(graphics, buttonFont, tinyFont, game);
-        RenderFeedback(graphics, resourceFont);
+        // Render main game UI (only if not showing tree or map full-screen)
+        if (!upgradeTreeMenu.isVisible) {
+            RenderTitle(graphics, titleFont);
+            RenderFPS(graphics, smallFont, fps);
+            RenderResources(graphics, resourceFont, game);
+            RenderPopulation(graphics, smallFont, game);
+            RenderProductionRates(graphics, smallFont, game);
+            RenderBuildings(graphics, resourceFont, smallFont, game);
+            RenderButtons(graphics, buttonFont, tinyFont, game);
+            RenderFeedback(graphics, resourceFont);
+
+            // Render map LAST (on top) if visible
+            if (showMap) {
+                mapView.Render(graphics, game);
+            }
+        }
+
+        // Always render tree menu if visible (overlays everything)
+        upgradeTreeMenu.Render(hdc, width, height, game);
     }
 
 private:
     void RenderTitle(Graphics& graphics, Font& font) {
         SolidBrush goldBrush(Color(255, 255, 215, 0));
-        PointF titlePos(300.0f, 20.0f);
+        PointF titlePos(20.0f, 15.0f);
         graphics.DrawString(L"=== PROCEDURAL CIVILIZATION ===", -1, &font, titlePos, &goldBrush);
     }
 
@@ -260,7 +442,7 @@ private:
         SolidBrush whiteBrush(Color(255, 255, 255, 255));
         std::wstringstream fpsStream;
         fpsStream << L"FPS: " << fps;
-        PointF fpsPos(10.0f, 10.0f);
+        PointF fpsPos(10.0f, 650.0f);
         graphics.DrawString(fpsStream.str().c_str(), -1, &font, fpsPos, &whiteBrush);
     }
 
@@ -270,8 +452,8 @@ private:
         SolidBrush stoneBrush(Color(255, 128, 128, 128));
         SolidBrush goldBrush(Color(255, 255, 215, 0));
 
-        float yPos = 80.0f;
-        float xPos = 30.0f;
+        float yPos = 70.0f;
+        float xPos = 20.0f;
 
         auto renderResource = [&](ResourceType type, SolidBrush& brush) {
             auto it = game.resources.find(type);
@@ -280,7 +462,7 @@ private:
                 ss << it->second.name << L": " << std::fixed << std::setprecision(1) << it->second.amount;
                 PointF pos(xPos, yPos);
                 graphics.DrawString(ss.str().c_str(), -1, &font, pos, &brush);
-                yPos += 35.0f;
+                yPos += 30.0f;
             }
             };
 
@@ -288,6 +470,15 @@ private:
         renderResource(ResourceType::Wood, woodBrush);
         renderResource(ResourceType::Stone, stoneBrush);
         renderResource(ResourceType::Gold, goldBrush);
+    }
+
+    void RenderPopulation(Graphics& graphics, Font& font, const GameState& game) {
+        SolidBrush whiteBrush(Color(255, 255, 255, 255));
+        std::wstringstream popStream;
+        popStream << L"Population: " << game.population.total << L"/" << game.population.maxPopulation;
+        popStream << L" (Idle: " << game.population.idle << L")";
+        PointF popPos(20.0f, 200.0f);
+        graphics.DrawString(popStream.str().c_str(), -1, &font, popPos, &whiteBrush);
     }
 
     void RenderProductionRates(Graphics& graphics, Font& font, const GameState& game) {
@@ -298,38 +489,39 @@ private:
 
         for (const auto& res : game.resources) {
             prodStream << L"\n  " << res.second.name << L": +"
-                << std::fixed << std::setprecision(1) << res.second.perSecond;
+                << std::fixed << std::setprecision(2) << res.second.perSecond;
         }
 
-        RectF prodRect(30.0f, 230.0f, 200.0f, 120.0f);
+        RectF prodRect(20.0f, 230.0f, 200.0f, 120.0f);
         graphics.DrawString(prodStream.str().c_str(), -1, &font, prodRect, NULL, &grayBrush);
     }
 
     void RenderBuildings(Graphics& graphics, Font& headerFont, Font& smallFont, const GameState& game) {
         SolidBrush whiteBrush(Color(255, 255, 255, 255));
-        SolidBrush grayBrush(Color(255, 180, 180, 180));
-
-        PointF buildingHeaderPos(400.0f, 300.0f);
+        PointF buildingHeaderPos(270.0f, 360.0f);
         graphics.DrawString(L"=== BUILDINGS ===", -1, &headerFont, buildingHeaderPos, &whiteBrush);
     }
 
     void RenderButtons(Graphics& graphics, Font& buttonFont, Font& tinyFont, const GameState& game) {
-        // Render gather buttons
+        // Upgrade tree button
+        upgradeTreeButton.Render(graphics, buttonFont);
+
+        // Map button
+        mapButton.Render(graphics, buttonFont);
+
         for (auto& button : gatherButtons) {
             button.Render(graphics, buttonFont);
         }
 
-        // Render building buttons with cost info
         for (size_t i = 0; i < buildingButtons.size(); i++) {
             buildingButtons[i].Render(graphics, buttonFont);
 
-            // Draw cost below button
-            if (i < game.buildings.size()) {
+            if (i < game.buildings.size() && game.IsBuildingUnlocked(static_cast<int>(i))) {
                 auto cost = game.buildings[i].GetNextCost();
                 std::wstringstream costStream;
                 costStream << L"Cost: ";
                 bool first = true;
-                for (const auto& c : cost) {
+                for (auto& c : cost) {
                     if (!first) costStream << L", ";
                     first = false;
 
@@ -340,7 +532,9 @@ private:
                     case ResourceType::Stone: resName = L"S"; break;
                     case ResourceType::Gold: resName = L"G"; break;
                     }
-                    costStream << resName << L":" << (int)c.second;
+
+                    double displayCost = c.second * (1.0 - game.costReduction);
+                    costStream << resName << L":" << (int)displayCost;
                 }
 
                 SolidBrush costBrush(Color(255, 150, 150, 150));
@@ -353,7 +547,7 @@ private:
     void RenderFeedback(Graphics& graphics, Font& font) {
         if (!clickFeedback.empty() && feedbackTimer > 0.0f) {
             SolidBrush feedbackBrush(Color(255, 255, 255, 100));
-            PointF feedbackPos(400.0f, 250.0f);
+            PointF feedbackPos(270.0f, 310.0f);
             graphics.DrawString(clickFeedback.c_str(), -1, &font, feedbackPos, &feedbackBrush);
         }
     }

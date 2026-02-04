@@ -56,6 +56,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         if (wParam == VK_ESCAPE) {
             PostQuitMessage(0);
         }
+        else {
+            g_ui.HandleKeyPress(wParam, g_game);
+        }
         return 0;
 
     case WM_MOUSEMOVE: {
@@ -74,6 +77,24 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
     case WM_LBUTTONUP: {
         g_ui.HandleMouseUp();
+        return 0;
+    }
+
+    case WM_RBUTTONDOWN: {
+        int x = LOWORD(lParam);
+        int y = HIWORD(lParam);
+        g_ui.HandleRightMouseDown(x, y);
+        return 0;
+    }
+
+    case WM_RBUTTONUP: {
+        g_ui.HandleRightMouseUp();
+        return 0;
+    }
+
+    case WM_MOUSEWHEEL: {
+        int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+        g_ui.HandleMouseWheel(delta);
         return 0;
     }
 
@@ -146,7 +167,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     // Initialize game and UI
     InitTiming();
-    g_ui.Initialize();
+    g_ui.Initialize(g_game);
 
     // Main game loop
     MSG msg = {};
